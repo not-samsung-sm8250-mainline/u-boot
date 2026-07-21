@@ -1,0 +1,44 @@
+name: Build images
+
+on: [push]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [sm8250-samsung-r8q]
+
+    name: Build ${{ matrix.device }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y --no-install-recommends gcc-aarch64-linux-gnu libgnutls28-dev
+
+      - name: Configure U-Boot
+        run: |
+          make CROSS_COMPILE=aarch64-linux-gnu- O=.output qcom_defconfig qcom-phone.config r8q.config
+
+      - name: Build U-Boot
+        run: |
+          make CROSS_COMPILE=aarch64-linux-gnu- O=.output -j$(nproc)
+
+      - name: Assemble U-Boot Image for ${{ matrix.device }}
+        run: |
+          mv -f .output/u-boot.bin not/boot/kernel
+          mv -f .output/u-boot.dtb not/boot/kernel_dtb
+          mv not/boot.img not/boot/boot.img
+          cd not/boot/ && ./magiskboot --repack boot.img u-boot.img
+          cd ../.. && cp not/boot/u-boot.img .output/u-boot.img
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: u-boot-${{ matrix.device }}.img
+          path: .output/u-boot.img
